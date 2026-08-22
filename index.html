@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Single-turnout layout simulator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:sans-serif;background:#f5f4f0;color:#2c2c2a;padding:1.5rem}
+@media(prefers-color-scheme:dark){body{background:#1a1a18;color:#d3d1c7}}
+
+.cfg{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.25rem}
+.cg{display:flex;flex-direction:column;gap:3px}
+.cg label{font-size:11px;color:#888780}`
+.cg span{font-size:12px;font-weight:500}
+
+canvas{display:block;border-radius:8px;border:0.5px solid #d3d1c7;width:100%;background:#eeede8}
+@media(prefers-color-scheme:dark){canvas{border-color:#3a3a38;background:#242422}}
+
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem;align-items:center}
+button{
+  font-size:13px;padding:6px 14px;cursor:pointer;
+  background:transparent;border:0.5px solid #888780;
+  border-radius:8px;color:inherit;
+}
+button:hover{background:rgba(0,0,0,0.05)}
+@media(prefers-color-scheme:dark){button:hover{background:rgba(255,255,255,0.05)}}
+
+.sep{width:1px;height:24px;background:#d3d1c7;margin:0 4px}
+@media(prefers-color-scheme:dark){.sep{background:#3a3a38}}
+
+.log{
+  margin-top:.75rem;font-size:12px;color:#888780;
+  font-family:monospace;min-height:36px;line-height:1.5
+}
+</style>
+</head>
+<body>
+
+<h2 style="font-size:16px;font-weight:500;margin-bottom:1rem">Single-turnout layout simulator</h2>
+
+<div class="cfg">
+  <div class="cg"><label>Lead spots</label><input type="range" id="sLead" min="1" max="8" value="2" step="1"><span id="vLead">2</span></div>
+  <div class="cg"><label>Main spots</label><input type="range" id="sMain" min="1" max="8" value="3" step="1"><span id="vMain">3</span></div>
+  <div class="cg"><label>Spur spots</label><input type="range" id="sSpur" min="1" max="8" value="2" step="1"><span id="vSpur">2</span></div>
+  <div class="cg"><label>Cars in play</label><input type="range" id="sCars" min="1" max="12" value="5" step="1"><span id="vCars">5</span></div>
+</div>
+
+<canvas id="c"></canvas>
+
+<div class="btns">
+  <button id="bL">← West</button>
+  <button id="bR">East →</button>
+  <div class="sep"></div>
+  <button id="bSw">Turnout: MAIN</button>
+  <div class="sep"></div>
+  <button id="bCouple">Couple next</button>
+  <button id="bDrop">Drop last</button>
+  <div class="sep"></div>
+  <button id="bReset">Reset</button>
+</div>
+<div class="log" id="log"></div>
+
+<script>
+const SLOT_W=56, SLOT_H=32, LEAD_Y=90, BRANCH_DROP=46, FROG_GAP=36, MARGIN=48;
+const LOCO_COL='#378ADD';
+const CAR_COLS=[
+  '#D85A30','#1D9E75','#7F77DD','#BA7517',
+  '#D4537E','#639922','#E24B4A','#0F6E56',
+  '#993C1D','#534AB7','#854F0B','#A32D2D'
+];
+
+// ── State ─────────────────────────────────────────────────────────────────────
+// cars: [{id, seg, slot}]
+//   id   — stable 0-based index assigned at init, never changes
+//   seg  — 'lead' | 'main' | 'spur'
+//   slot — 0-based position within segment (0 = westmost on lead, 0 = frog-end on branches)
+//
+// consist: [id, ...]
+//   Ordered loco-adjacent → tail (consist[0] is directly behind loco,
+//   consist[last] is the rearmost car).
+//   couple() appends (push), drop() removes tail (pop),
+//   uncoupleAt() cuts from clicked car to end (splice).
+//
+// switchPos: 'main' | 'spur'  — which branch the frog connects to
+
+let S = {};
+
+function cfgVal(id){ return parseInt(document.getElementById(id).value); }
+
+function initState(){
+  const leadSpots=cfgVal('sLead'), mainSpots=cfgVal('sMain'), spurSpots=cfgVal('sSpur');
+  const maxCars=mainSpots+spurSpots;
+  const carsInPlay=Math.min(cfgVal('sCars'), maxCars);
+
+  // Place cars: fill main first (slots 0..mainSpots-1), then spur.
+  // id === array index — stable, never reused.
+  const cars=[];
+  for(let i=0; i<mainSpots && cars.length<carsInPlay; i++)
+    cars.push({id:cars.length, seg:'main', slot:i});
+  for(let i=0; i<spurSpots && cars.length<carsInPlay; i++)
+    cars.push({id:cars.length, seg:'spur', slot:i});
+
+  S={ leadSpots, mainSpots, spurSpots,
+      switchPos:'main',
+      locoSeg:'lead', locoSlot:0,
+      consist:[],
+      cars };
+
+  document.getElementById('bSw').textContent='Turnout: MAIN';
+  log('Reset. '+carsInPlay+' cars. '+
+      cars.map(c=>(c.id+1)+'@'+c.seg+'['+c.slot+']').join(', '));
+  render();
+}
+
+// ── Lookups ───────────────────────────────────────────────────────────────────
+
+function carById(id){ return S.cars.find(c=>c.id===id); }
+function carAt(seg,slot){ return S.cars.find(c=>c.seg===seg&&c.slot===slot)??null; }
+function inConsist(id){ return S.consist.includes(id); }
+function segCap(seg){ return seg==='lead'?S.leadSpots:seg==='main'?S.mainSpots:S.spurSpots; }
+function log(msg){ document.getElementById('log').textContent=msg; }
+
+// Position of the rearmost end of the consist (or loco if consist is empty).
+function tailPos(){
+  if(!S.consist.length) return {seg:S.locoSeg, slot:S.locoSlot};
+  const c=carById(S.consist[S.consist.length-1]);
+  return {seg:c.seg, slot:c.slot};
+}
+
+function consistDesc(){
+  return S.consist.length ? 'L→'+S.consist.map(id=>id+1).join('→') : 'loco only';
+}
+
+// ── Graph traversal ───────────────────────────────────────────────────────────
+// stepEast / stepWest return the next {seg, slot} in that direction,
+// or null if the move would leave the track (buffer stop).
+// The frog connects lead slot (leadSpots-1) ↔ active branch slot 0.
+
+function stepEast(seg,slot){
+  if(seg==='lead'){
+    if(slot<S.leadSpots-1) return {seg:'lead', slot:slot+1};
+    return {seg:S.switchPos, slot:0};   // through frog onto active branch
+  }
+  if(slot<segCap(seg)-1) return {seg, slot:slot+1};
+  return null;                           // east buffer stop
+}
+
+function stepWest(seg,slot){
+  if(seg==='lead'){
+    if(slot>0) return {seg:'lead', slot:slot-1};
+    return null;                         // west buffer stop
+  }
+  if(slot>0) return {seg, slot:slot-1};
+  return {seg:'lead', slot:S.leadSpots-1}; // back through frog onto lead
+}
+
+function stepDir(seg,slot,dir){ return dir>0?stepEast(seg,slot):stepWest(seg,slot); }
+
+// Can a car/loco legally enter this segment given current switch position?
+function canEnter(seg){ return seg==='lead'||seg===S.switchPos; }
+
+// ── Push chain ────────────────────────────────────────────────────────────────
+// Starting at (seg, slot), collect all consecutive loose (non-consist) cars
+// ahead in dir, then shift them all one step. Returns false without mutating
+// state if any car would hit a buffer or closed turnout leg.
+
+function pushLoose(seg,slot,dir){
+  const chain=[];
+  let s=seg, sl=slot;
+  while(true){
+    const c=carAt(s,sl);
+    if(!c||inConsist(c.id)) break;
+    chain.push(c);
+    const nxt=stepDir(s,sl,dir);
+    if(!nxt||!canEnter(nxt.seg)) return false;
+    s=nxt.seg; sl=nxt.slot;
+  }
+  // Shift back-to-front so no two cars share a slot mid-move.
+  for(let i=chain.length-1;i>=0;i--){
+    const nxt=stepDir(chain[i].seg,chain[i].slot,dir);
+    chain[i].seg=nxt.seg; chain[i].slot=nxt.slot;
+  }
+  return true;
+}
+
+// ── Move ──────────────────────────────────────────────────────────────────────
+// Linear score for finding the leading edge of the train.
+// Lead slots: 0..leadSpots-1. Branch slots: leadSpots..leadSpots+cap-1.
+function posScore(seg,slot){ return seg==='lead'?slot:S.leadSpots+slot; }
+
+function move(dir){
+  // Build list of all positions occupied by the train.
+  const trainPositions=[
+    {seg:S.locoSeg, slot:S.locoSlot},
+    ...S.consist.map(id=>{ const c=carById(id); return {seg:c.seg,slot:c.slot}; })
+  ];
+
+  // Leading edge = position furthest in the direction of travel.
+  const leadPos=trainPositions.reduce((best,p)=>{
+    const bs=posScore(best.seg,best.slot), ps=posScore(p.seg,p.slot);
+    return dir>0?(ps>bs?p:best):(ps<bs?p:best);
+  });
+
+  const target=stepDir(leadPos.seg,leadPos.slot,dir);
+  if(!target){ log('Buffer stop.'); return; }
+  if(!canEnter(target.seg)){
+    log('Turnout set to '+S.switchPos+' — cannot enter '+target.seg+'.');
+    return;
+  }
+
+  const blocker=carAt(target.seg,target.slot);
+  if(blocker&&!inConsist(blocker.id)){
+    if(dir<0){ log('Blocked by car '+(blocker.id+1)+' — cannot push west.'); return; }
+    if(!pushLoose(target.seg,target.slot,dir)){
+      log('No room to push car '+(blocker.id+1)+'.');
+      return;
+    }
+  }
+
+  // Move consist cars trailing-first (tail moves before front when going east,
+  // front moves before tail when going west) to avoid slot collisions mid-move.
+  const indices=S.consist.map((_,i)=>i);
+  if(dir>0) indices.reverse();
+  for(const i of indices){
+    const c=carById(S.consist[i]);
+    const nxt=stepDir(c.seg,c.slot,dir);
+    c.seg=nxt.seg; c.slot=nxt.slot;
+  }
+
+  const locoNxt=stepDir(S.locoSeg,S.locoSlot,dir);
+  S.locoSeg=locoNxt.seg; S.locoSlot=locoNxt.slot;
+
+  log('Loco → '+S.locoSeg+'['+S.locoSlot+'] | '+consistDesc());
+  render();
+}
+
+// ── Couple / Drop / Uncouple ──────────────────────────────────────────────────
+
+// Couple the car immediately east of the consist tail (or loco if consist empty).
+function couple(){
+  const tail=tailPos();
+  const nxt=stepEast(tail.seg,tail.slot);
+  if(!nxt){ log('Nothing to couple — at east buffer.'); return; }
+  if(!canEnter(nxt.seg)){
+    log('Turnout set to '+S.switchPos+' — cannot reach '+nxt.seg+'.'); return;
+  }
+  const c=carAt(nxt.seg,nxt.slot);
+  if(!c){ log('No car at '+nxt.seg+'['+nxt.slot+'].'); return; }
+  if(inConsist(c.id)){ log('Car '+(c.id+1)+' already in consist.'); return; }
+  S.consist.push(c.id);
+  log('Coupled car '+(c.id+1)+'. '+consistDesc());
+  render();
+}
+
+// Drop the rearmost car from the consist, leaving it in place on the track.
+function drop(){
+  if(!S.consist.length){ log('Consist is empty.'); return; }
+  const id=S.consist.pop();
+  const c=carById(id);
+  log('Dropped car '+(id+1)+' at '+c.seg+'['+c.slot+']. '+consistDesc());
+  render();
+}
+
+// Click a consist car to cut it and everything behind it loose.
+function uncoupleAt(carId){
+  const pos=S.consist.indexOf(carId);
+  if(pos<0){ log('Car '+(carId+1)+' is not in consist.'); return; }
+  const dropped=S.consist.splice(pos);
+  log('Uncoupled car '+(carId+1)+
+      (dropped.length>1?' and '+(dropped.length-1)+' behind it.':'.')+
+      ' '+consistDesc());
+  render();
+}
+
+// ── Switch ────────────────────────────────────────────────────────────────────
+
+function toggleSwitch(){
+  if(S.locoSeg==='main'||S.locoSeg==='spur'){
+    log('Move loco to lead before throwing switch.'); return;
+  }
+  if(S.consist.some(id=>{ const c=carById(id); return c.seg==='main'||c.seg==='spur'; })){
+    log('A consist car is on a branch — drop it first.'); return;
+  }
+  S.switchPos=S.switchPos==='main'?'spur':'main';
+  document.getElementById('bSw').textContent='Turnout: '+S.switchPos.toUpperCase();
+  log('Turnout → '+S.switchPos+'.');
+  render();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+function slotX(seg,slot){
+  const frogX=MARGIN+S.leadSpots*SLOT_W;
+  return seg==='lead'
+    ? MARGIN+slot*SLOT_W+4
+    : frogX+FROG_GAP+slot*SLOT_W+4;
+}
+function slotY(seg){ return seg==='spur'?LEAD_Y+BRANCH_DROP:LEAD_Y; }
+
+function render(){
+  const canvas=document.getElementById('c');
+  const dpr=window.devicePixelRatio||1;
+  const CW=canvas.parentElement.clientWidth, CH=170;
+  canvas.width=CW*dpr; canvas.height=CH*dpr;
+  canvas.style.width=CW+'px'; canvas.style.height=CH+'px';
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+  const trackFill=dark?'#3a3a38':'#d3d1c7';
+  const railCol  =dark?'#888780':'#5f5e5a';
+  const bufCol   =dark?'#5f5e5a':'#999896';
+  const numCol   =dark?'#555450':'#c4c2b9';
+  const lblCol   ='#888780';
+
+  ctx.clearRect(0,0,CW,CH);
+
+  const frogX=MARGIN+S.leadSpots*SLOT_W;
+  const MAIN_Y=LEAD_Y, SPUR_Y=LEAD_Y+BRANCH_DROP;
+
+  function drawTrack(x,y,slots){
+    const len=slots*SLOT_W;
+    ctx.fillStyle=trackFill; ctx.fillRect(x,y-5,len,10);
+    ctx.fillStyle=railCol;
+    ctx.fillRect(x,y-5,len,2);
+    ctx.fillRect(x,y+3,len,2);
+  }
+
+  function bufStop(x,y){
+    ctx.fillStyle=bufCol;
+    ctx.fillRect(x-3,y-16,5,32);
+    ctx.fillRect(x-8,y-16,14,5);
+    ctx.fillRect(x-8,y+11,14,5);
+  }
+
+  drawTrack(MARGIN,MAIN_Y,S.leadSpots);
+  bufStop(MARGIN,MAIN_Y);
+  drawTrack(frogX+FROG_GAP,MAIN_Y,S.mainSpots);
+  bufStop(frogX+FROG_GAP+S.mainSpots*SLOT_W,MAIN_Y);
+  drawTrack(frogX+FROG_GAP,SPUR_Y,S.spurSpots);
+  bufStop(frogX+FROG_GAP+S.spurSpots*SLOT_W,SPUR_Y);
+
+  // Frog: active leg solid amber, inactive leg dashed gray
+  ctx.lineWidth=3; ctx.strokeStyle='#EF9F27';
+  ctx.beginPath(); ctx.moveTo(frogX,MAIN_Y);
+  ctx.lineTo(frogX+FROG_GAP, S.switchPos==='main'?MAIN_Y:SPUR_Y); ctx.stroke();
+  ctx.lineWidth=2; ctx.strokeStyle=trackFill; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(frogX,MAIN_Y);
+  ctx.lineTo(frogX+FROG_GAP, S.switchPos==='main'?SPUR_Y:MAIN_Y); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Segment labels
+  ctx.fillStyle=lblCol; ctx.font='11px sans-serif';
+  ctx.textAlign='right'; ctx.fillText('Lead',MARGIN-4,MAIN_Y+4);
+  ctx.textAlign='left';
+  ctx.fillText('Main',frogX+FROG_GAP+S.mainSpots*SLOT_W+8,MAIN_Y+4);
+  ctx.fillText('Spur',frogX+FROG_GAP+S.spurSpots*SLOT_W+8,SPUR_Y+4);
+
+  // Slot index numbers
+  function drawNums(seg,x0,y){
+    for(let i=0;i<segCap(seg);i++){
+      ctx.fillStyle=numCol; ctx.font='9px monospace'; ctx.textAlign='center';
+      ctx.fillText(i, x0+i*SLOT_W+SLOT_W/2, y+18);
+    }
+  }
+  drawNums('lead',MARGIN,MAIN_Y);
+  drawNums('main',frogX+FROG_GAP,MAIN_Y);
+  drawNums('spur',frogX+FROG_GAP,SPUR_Y);
+
+  // Cars
+  const consistSet=new Set(S.consist);
+  S.cars.forEach(car=>{
+    const x=slotX(car.seg,car.slot), y=slotY(car.seg), w=SLOT_W-8;
+    const inC=consistSet.has(car.id);
+    ctx.fillStyle=CAR_COLS[car.id%CAR_COLS.length];
+    ctx.globalAlpha=inC?1:0.82;
+    ctx.beginPath(); ctx.roundRect(x,y-SLOT_H/2,w,SLOT_H,4); ctx.fill();
+    if(inC){
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.roundRect(x,y-SLOT_H/2,w,SLOT_H,4); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#fff'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(car.id+1, x+w/2, y+4);
+  });
+
+  // Loco
+  const lx=slotX(S.locoSeg,S.locoSlot), ly=slotY(S.locoSeg), lw=SLOT_W-8;
+  ctx.fillStyle=LOCO_COL;
+  ctx.beginPath(); ctx.roundRect(lx,ly-SLOT_H/2-2,lw,SLOT_H+4,5); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('L', lx+lw/2, ly+5);
+
+  // Click to uncouple
+  canvas.onclick=(e)=>{
+    const rect=canvas.getBoundingClientRect();
+    const mx=(e.clientX-rect.left)*(CW/rect.width);
+    const my=(e.clientY-rect.top)*(CH/rect.height);
+    for(const car of S.cars){
+      const x=slotX(car.seg,car.slot), y=slotY(car.seg), w=SLOT_W-8;
+      if(mx>=x&&mx<=x+w&&Math.abs(my-y)<SLOT_H/2+2){
+        uncoupleAt(car.id);
+        return;
+      }
+    }
+  };
+}
+
+// ── Wiring ────────────────────────────────────────────────────────────────────
+
+['sLead','sMain','sSpur','sCars'].forEach(id=>{
+  const el=document.getElementById(id);
+  const out=document.getElementById('v'+id.slice(1));
+  el.addEventListener('input',()=>{ out.textContent=el.value; initState(); });
+});
+
+document.getElementById('bL').onclick=()=>move(-1);
+document.getElementById('bR').onclick=()=>move(1);
+document.getElementById('bSw').onclick=toggleSwitch;
+document.getElementById('bCouple').onclick=couple;
+document.getElementById('bDrop').onclick=drop;
+document.getElementById('bReset').onclick=initState;
+window.addEventListener('resize',render);
+
+initState();
+</script>
+</body>
+</html>
