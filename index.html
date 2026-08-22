@@ -12,9 +12,27 @@ body{font-family:sans-serif;background:#f5f4f0;color:#2c2c2a;padding:1.5rem}
 
 .cfg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:.75rem}
 .cfg2{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:1.25rem}
-.cg{display:flex;flex-direction:column;gap:3px}
+.cg{display:flex;flex-direction:column;gap:4px}
 .cg label{font-size:11px;color:#888780}
-.cg span{font-size:12px;font-weight:500}
+
+/* +/- spinner control */
+.spinner{display:flex;align-items:center;gap:0}
+.spinner button{
+  width:36px;height:36px;font-size:18px;line-height:1;
+  padding:0;border-radius:8px;border:0.5px solid #c4c2b9;
+  background:#e4e2d8;color:#2c2c2a;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;user-select:none;-webkit-user-select:none;
+}
+.spinner button:active{background:#d3d1c7}
+.spinner .val{
+  min-width:36px;text-align:center;font-size:15px;font-weight:600;
+  padding:0 4px;
+}
+@media(prefers-color-scheme:dark){
+  .spinner button{background:#2e2e2c;border-color:#444442;color:#d3d1c7}
+  .spinner button:active{background:#3a3a38}
+}
 
 .mode-row{display:flex;align-items:center;gap:10px;margin-bottom:1.25rem}
 .mode-row label{font-size:13px;cursor:pointer;user-select:none}
@@ -68,13 +86,13 @@ button:hover{background:rgba(0,0,0,0.05)}
 </div>
 
 <div class="cfg">
-  <div class="cg"><label>Lead spots</label><input type="range" id="sLead" min="1" max="8" value="3" step="1"><span id="vLead">3</span></div>
-  <div class="cg"><label>Main spots</label><input type="range" id="sMain" min="1" max="8" value="3" step="1"><span id="vMain">3</span></div>
-  <div class="cg"><label>Spur spots</label><input type="range" id="sSpur" min="1" max="8" value="3" step="1"><span id="vSpur">3</span></div>
+  <div class="cg"><label>Lead spots</label><div class="spinner"><button id="sLead_dn">−</button><span class="val" id="vLead">3</span><button id="sLead_up">+</button></div></div>
+  <div class="cg"><label>Main spots</label><div class="spinner"><button id="sMain_dn">−</button><span class="val" id="vMain">3</span><button id="sMain_up">+</button></div></div>
+  <div class="cg"><label>Spur spots</label><div class="spinner"><button id="sSpur_dn">−</button><span class="val" id="vSpur">3</span><button id="sSpur_up">+</button></div></div>
 </div>
 <div class="cfg2">
-  <div class="cg"><label>Cars in play</label><input type="range" id="sCars" min="1" max="12" value="5" step="1"><span id="vCars">5</span></div>
-  <div class="cg"><label>Starting consist</label><input type="range" id="sConsist" min="0" max="3" value="2" step="1"><span id="vConsist">2</span></div>
+  <div class="cg"><label>Cars in play</label><div class="spinner"><button id="sCars_dn">−</button><span class="val" id="vCars">5</span><button id="sCars_up">+</button></div></div>
+  <div class="cg"><label>Starting consist</label><div class="spinner"><button id="sConsist_dn">−</button><span class="val" id="vConsist">2</span><button id="sConsist_up">+</button></div></div>
   <div class="cg" style="justify-content:flex-end">
     <label style="font-size:11px;color:transparent">-</label>
     <button id="bNewPuzzle" style="align-self:flex-start">New puzzle</button>
@@ -136,7 +154,7 @@ const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 let S = {};
 
-function cfgVal(id){ return parseInt(document.getElementById(id).value); }
+function cfgVal(id){ return parseInt(document.getElementById('v'+id.slice(1)).textContent); }
 function puzzleOn(){ return document.getElementById('puzzleMode').checked; }
 
 // ── Slider constraint enforcement ─────────────────────────────────────────────
@@ -145,9 +163,8 @@ function puzzleOn(){ return document.getElementById('puzzleMode').checked; }
 function clampConsistSlider(){
   const lead=cfgVal('sLead'), spur=cfgVal('sSpur'), cars=cfgVal('sCars');
   const maxConsist=Math.min(lead, Math.max(0, cars-spur));
-  const el=document.getElementById('sConsist');
-  el.max=maxConsist;
-  if(parseInt(el.value)>maxConsist){ el.value=maxConsist; document.getElementById('vConsist').textContent=maxConsist; }
+  SPIN.sConsist.max=maxConsist;
+  if(SPIN.sConsist.val>maxConsist) setSpinVal('sConsist', maxConsist);
 }
 
 // ── Random helpers ────────────────────────────────────────────────────────────
@@ -523,22 +540,51 @@ function render(){
 // ── Wiring ────────────────────────────────────────────────────────────────────
 
 // When main or spur spot count changes, reset cars-in-play to (main+spur-1)
-function resetCarsDefault(){
-  const def=cfgVal('sMain')+cfgVal('sSpur')-1;
-  const el=document.getElementById('sCars');
-  el.value=def;
-  document.getElementById('vCars').textContent=def;
+// Spinner state: min/max for each control
+const SPIN={
+  sLead:   {min:1, max:8,  val:3},
+  sMain:   {min:1, max:8,  val:3},
+  sSpur:   {min:1, max:8,  val:3},
+  sCars:   {min:1, max:12, val:5},
+  sConsist:{min:0, max:8,  val:2},
+};
+
+function spinVal(id){ return SPIN[id].val; }
+
+// Override cfgVal to use SPIN state
+// (cfgVal above is redefined here to read SPIN)
+// We patch it directly:
+// cfgVal reads from span, which we keep in sync with SPIN[id].val
+
+function setSpinVal(id, v){
+  const s=SPIN[id];
+  s.val=Math.max(s.min, Math.min(s.max, v));
+  document.getElementById('v'+id.slice(1)).textContent=s.val;
 }
 
-['sLead','sMain','sSpur','sCars','sConsist'].forEach(id=>{
-  const el=document.getElementById(id);
-  const key=id.slice(1);
-  const out=document.getElementById('v'+key);
-  el.addEventListener('input',()=>{
+function resetCarsDefault(){
+  setSpinVal('sCars', SPIN.sMain.val + SPIN.sSpur.val - 1);
+}
+
+function clampAndInit(){
+  clampConsistSlider();
+  initState();
+}
+
+// Wire up all spinner +/- buttons
+Object.keys(SPIN).forEach(id=>{
+  // initialise display
+  document.getElementById('v'+id.slice(1)).textContent=SPIN[id].val;
+
+  document.getElementById(id+'_up').addEventListener('click',()=>{
+    setSpinVal(id, SPIN[id].val+1);
     if(id==='sMain'||id==='sSpur') resetCarsDefault();
-    out.textContent=el.value;
-    clampConsistSlider();
-    initState();
+    clampAndInit();
+  });
+  document.getElementById(id+'_dn').addEventListener('click',()=>{
+    setSpinVal(id, SPIN[id].val-1);
+    if(id==='sMain'||id==='sSpur') resetCarsDefault();
+    clampAndInit();
   });
 });
 
