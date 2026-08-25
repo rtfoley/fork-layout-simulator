@@ -4,38 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
-<title>Single-turnout layout simulator</title>
+<title>Railroad switching simulator</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:sans-serif;background:#f5f4f0;color:#2c2c2a;padding:1.5rem}
 @media(prefers-color-scheme:dark){body{background:#1a1a18;color:#d3d1c7}}
 
-.cfg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:.75rem}
-.cfg2{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:1.25rem}
-.cg{display:flex;flex-direction:column;gap:4px}
-.cg label{font-size:11px;color:#888780}
+/* layout selector */
+.layout-row{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap}
+.layout-btn{font-size:13px;padding:6px 16px;cursor:pointer;border-radius:8px;
+  border:0.5px solid #888780;background:transparent;color:inherit}
+.layout-btn.active{background:#378ADD;color:#fff;border-color:#378ADD}
 
-/* +/- spinner control */
-.spinner{display:flex;align-items:center;gap:0}
-.spinner button{
-  width:36px;height:36px;font-size:18px;line-height:1;
-  padding:0;border-radius:8px;border:0.5px solid #c4c2b9;
-  background:#e4e2d8;color:#2c2c2a;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;user-select:none;-webkit-user-select:none;
-}
-.spinner button:active{background:#d3d1c7}
-.spinner .val{
-  min-width:36px;text-align:center;font-size:15px;font-weight:600;
-  padding:0 4px;
-}
-@media(prefers-color-scheme:dark){
-  .spinner button{background:#2e2e2c;border-color:#444442;color:#d3d1c7}
-  .spinner button:active{background:#3a3a38}
-}
-
-.mode-row{display:flex;align-items:center;gap:10px;margin-bottom:1.25rem}
-.mode-row label{font-size:13px;cursor:pointer;user-select:none}
+/* mode toggle row */
+.mode-row{display:flex;align-items:center;gap:10px;margin-bottom:1rem}
 .toggle{position:relative;display:inline-block;width:36px;height:20px}
 .toggle input{opacity:0;width:0;height:0}
 .slider-t{position:absolute;inset:0;background:#d3d1c7;border-radius:20px;cursor:pointer;transition:.2s}
@@ -43,6 +25,25 @@ body{font-family:sans-serif;background:#f5f4f0;color:#2c2c2a;padding:1.5rem}
 input:checked+.slider-t{background:#378ADD}
 input:checked+.slider-t:before{transform:translateX(16px)}
 @media(prefers-color-scheme:dark){.slider-t{background:#3a3a38}}
+
+/* config spinners */
+.cfg{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:.75rem}
+.cfg2{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:1.25rem}
+.cg{display:flex;flex-direction:column;gap:4px}
+.cg label{font-size:11px;color:#888780}
+.spinner{display:flex;align-items:center}
+.spinner button{
+  width:36px;height:36px;font-size:18px;padding:0;border-radius:8px;
+  border:0.5px solid #c4c2b9;background:#e4e2d8;color:#2c2c2a;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;user-select:none;-webkit-user-select:none;
+}
+.spinner button:active{background:#d3d1c7}
+.spinner .val{min-width:36px;text-align:center;font-size:15px;font-weight:600;padding:0 4px}
+@media(prefers-color-scheme:dark){
+  .spinner button{background:#2e2e2c;border-color:#444442;color:#d3d1c7}
+  .spinner button:active{background:#3a3a38}
+}
 
 canvas{display:block;border-radius:8px;border:0.5px solid #d3d1c7;width:100%;background:#eeede8}
 @media(prefers-color-scheme:dark){canvas{border-color:#3a3a38;background:#242422}}
@@ -52,7 +53,7 @@ canvas{display:block;border-radius:8px;border:0.5px solid #d3d1c7;width:100%;bac
 @media(prefers-color-scheme:dark){.goal-wrap{background:#242422;border-color:#3a3a38}}
 .goal-wrap.visible{display:block}
 .goal-label{font-size:11px;color:#888780;margin-bottom:.4rem}
-.goal-cars{display:flex;gap:6px;align-items:center}
+.goal-cars{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .goal-car{width:40px;height:26px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
 .goal-slot{font-size:9px;color:#b4b2a9;text-align:center;margin-top:2px}
 .goal-item{display:flex;flex-direction:column;align-items:center}
@@ -78,31 +79,43 @@ button:hover{background:rgba(0,0,0,0.05)}
 </head>
 <body>
 
-<h2 style="font-size:16px;font-weight:500;margin-bottom:1rem">Single-turnout layout simulator</h2>
+<h2 style="font-size:16px;font-weight:500;margin-bottom:1rem">Railroad switching simulator</h2>
+
+<div class="layout-row">
+  <button class="layout-btn active" id="btnSingleTurnout">Single turnout</button>
+  <button class="layout-btn" id="btnInglenook">Inglenook 3-2-2</button>
+</div>
 
 <div class="mode-row">
   <label class="toggle"><input type="checkbox" id="puzzleMode" checked><span class="slider-t"></span></label>
   <label for="puzzleMode" style="font-size:13px">Puzzle mode</label>
 </div>
 
-<div class="cfg">
-  <div class="cg"><label>Lead spots</label><div class="spinner"><button id="sLead_dn">−</button><span class="val" id="vLead">3</span><button id="sLead_up">+</button></div></div>
-  <div class="cg"><label>Main spots</label><div class="spinner"><button id="sMain_dn">−</button><span class="val" id="vMain">3</span><button id="sMain_up">+</button></div></div>
-  <div class="cg"><label>Spur spots</label><div class="spinner"><button id="sSpur_dn">−</button><span class="val" id="vSpur">3</span><button id="sSpur_up">+</button></div></div>
-</div>
-<div class="cfg2">
-  <div class="cg"><label>Cars in play</label><div class="spinner"><button id="sCars_dn">−</button><span class="val" id="vCars">5</span><button id="sCars_up">+</button></div></div>
-  <div class="cg"><label>Starting consist</label><div class="spinner"><button id="sConsist_dn">−</button><span class="val" id="vConsist">2</span><button id="sConsist_up">+</button></div></div>
-  <div class="cg" style="justify-content:flex-end">
-    <label style="font-size:11px;color:transparent">-</label>
-    <button id="bNewPuzzle" style="align-self:flex-start">New puzzle</button>
+<!-- Single-turnout config (shown/hidden by layout) -->
+<div id="stConfig">
+  <div class="cfg">
+    <div class="cg"><label>Lead spots</label><div class="spinner"><button id="sLead_dn">−</button><span class="val" id="vLead">3</span><button id="sLead_up">+</button></div></div>
+    <div class="cg"><label>Main spots</label><div class="spinner"><button id="sMain_dn">−</button><span class="val" id="vMain">3</span><button id="sMain_up">+</button></div></div>
+    <div class="cg"><label>Spur spots</label><div class="spinner"><button id="sSpur_dn">−</button><span class="val" id="vSpur">3</span><button id="sSpur_up">+</button></div></div>
   </div>
+  <div class="cfg2">
+    <div class="cg"><label>Cars in play</label><div class="spinner"><button id="sCars_dn">−</button><span class="val" id="vCars">5</span><button id="sCars_up">+</button></div></div>
+    <div class="cg"><label>Starting consist</label><div class="spinner"><button id="sConsist_dn">−</button><span class="val" id="vConsist">2</span><button id="sConsist_up">+</button></div></div>
+    <div class="cg" style="justify-content:flex-end;padding-top:18px">
+      <button id="bNewPuzzle">New puzzle</button>
+    </div>
+  </div>
+</div>
+
+<!-- Inglenook config (just new puzzle button, fixed topology) -->
+<div id="igConfig" style="display:none;margin-bottom:1.25rem">
+  <button id="bNewPuzzleIG">New puzzle</button>
 </div>
 
 <canvas id="c"></canvas>
 
 <div class="goal-wrap" id="goalWrap">
-  <div class="goal-label">Goal — spot these cars on the spur (slot 0 = frog end):</div>
+  <div class="goal-label" id="goalLabel">Goal:</div>
   <div class="goal-cars" id="goalCars"></div>
 </div>
 
@@ -112,7 +125,9 @@ button:hover{background:rgba(0,0,0,0.05)}
   <button id="bL">← West</button>
   <button id="bR">East →</button>
   <div class="sep"></div>
-  <button id="bSw">Turnout: MAIN</button>
+  <div id="swButtons">
+    <!-- populated by layout init -->
+  </div>
   <div class="sep"></div>
   <button id="bCouple">Couple next</button>
   <button id="bDrop">Drop last</button>
@@ -122,7 +137,7 @@ button:hover{background:rgba(0,0,0,0.05)}
 <div class="log" id="log"></div>
 <div class="keys">
   <span><kbd>←</kbd><kbd>→</kbd> move</span>
-  <span><kbd>S</kbd> switch</span>
+  <span id="keySwDesc"><kbd>S</kbd> switch</span>
   <span><kbd>C</kbd> couple next</span>
   <span><kbd>D</kbd> drop last</span>
   <span><kbd>R</kbd> reset</span>
@@ -130,44 +145,78 @@ button:hover{background:rgba(0,0,0,0.05)}
 </div>
 
 <script>
-const SLOT_W=56, SLOT_H=32, LEAD_Y=90, BRANCH_DROP=46, FROG_GAP=36, MARGIN=48;
+// ═══════════════════════════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════════════════════════
+const SLOT_W=52, SLOT_H=30, MARGIN=48, FROG_GAP=34;
 const LOCO_COL='#378ADD';
-const CAR_COLS=[
-  '#D85A30','#1D9E75','#7F77DD','#BA7517',
-  '#D4537E','#639922','#E24B4A','#0F6E56',
-  '#993C1D','#534AB7','#854F0B','#A32D2D'
-];
+const CAR_COLS=['#D85A30','#1D9E75','#7F77DD','#BA7517','#D4537E','#639922',
+                '#E24B4A','#0F6E56','#993C1D','#534AB7','#854F0B','#A32D2D'];
 const LETTERS='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-// ── State ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Layout type
+// ═══════════════════════════════════════════════════════════════════════════════
+// 'st'  = single turnout  (lead, main, spur)
+// 'ing' = inglenook 3-2-2 (lead, main[3], spurA[2], spurB[2])
+
+let LAYOUT = 'st';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════════════════════════
 // cars: [{id, letter, seg, slot}]
-//   id      — stable 0-based index, never changes
-//   letter  — display label ('A'..'Z')
-//   seg     — 'lead' | 'main' | 'spur'
-//   slot    — 0-based within segment
+//   seg — 'lead' | 'main' | 'spur'          (single turnout)
+//         'lead' | 'main' | 'spurA' | 'spurB' (inglenook)
 //
-// consist: [id, ...]  loco-adjacent first, tail last
-// goal: [{letter, slot}]  desired spur arrangement, index = spur slot
-//   null when puzzle mode is off
+// consist: [id,...]  loco-adjacent first, tail last
 //
-// switchPos: 'main' | 'spur'
+// Single-turnout switches:
+//   S.switchPos: 'main'|'spur'
+//
+// Inglenook switches:
+//   S.sw1: 'main'|'branch'   (T1: lead → main spur OR → T2)
+//   S.sw2: 'spurA'|'spurB'   (T2: → spur A OR → spur B)
+//
+// goal: [{letter,slot}] target arrangement for goal segment
+//   single-turnout → 'spur'
+//   inglenook      → 'main'
 
 let S = {};
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Spinner config (single-turnout only)
+// ═══════════════════════════════════════════════════════════════════════════════
+const SPIN={
+  sLead:   {min:1,max:8, val:3},
+  sMain:   {min:1,max:8, val:3},
+  sSpur:   {min:1,max:8, val:3},
+  sCars:   {min:1,max:12,val:5},
+  sConsist:{min:0,max:8, val:2},
+};
+
 function cfgVal(id){ return parseInt(document.getElementById('v'+id.slice(1)).textContent); }
 function puzzleOn(){ return document.getElementById('puzzleMode').checked; }
+function log(msg){ document.getElementById('log').textContent=msg; }
 
-// ── Slider constraint enforcement ─────────────────────────────────────────────
-// consistSize <= leadSpots (cars must fit behind loco on lead)
-// consistSize <= carsInPlay - spurSpots (spur must be fully occupied)
-function clampConsistSlider(){
-  const lead=cfgVal('sLead'), spur=cfgVal('sSpur'), cars=cfgVal('sCars');
-  const maxConsist=Math.min(lead, Math.max(0, cars-spur));
-  SPIN.sConsist.max=maxConsist;
-  if(SPIN.sConsist.val>maxConsist) setSpinVal('sConsist', maxConsist);
+function setSpinVal(id,v){
+  const s=SPIN[id];
+  s.val=Math.max(s.min,Math.min(s.max,v));
+  document.getElementById('v'+id.slice(1)).textContent=s.val;
+}
+function resetCarsDefault(){
+  setSpinVal('sCars',SPIN.sMain.val+SPIN.sSpur.val-1);
+}
+function clampConsistSpinner(){
+  const lead=cfgVal('sLead'),spur=cfgVal('sSpur'),cars=cfgVal('sCars');
+  const max=Math.min(lead,Math.max(0,cars-spur));
+  SPIN.sConsist.max=max;
+  if(SPIN.sConsist.val>max) setSpinVal('sConsist',max);
 }
 
-// ── Random helpers ────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════════════════════════
 function shuffle(arr){
   for(let i=arr.length-1;i>0;i--){
     const j=Math.floor(Math.random()*(i+1));
@@ -176,84 +225,24 @@ function shuffle(arr){
   return arr;
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-function initState(){
-  clampConsistSlider();
-  const leadSpots=cfgVal('sLead'), mainSpots=cfgVal('sMain'), spurSpots=cfgVal('sSpur');
-  const totalSlots=leadSpots+mainSpots+spurSpots;
-  const carsInPlay=Math.min(cfgVal('sCars'), totalSlots);
-  const consistSize=Math.min(cfgVal('sConsist'), leadSpots, Math.max(0,carsInPlay-spurSpots));
-  const mainCount=carsInPlay-spurSpots-consistSize;
-
-  // Exactly carsInPlay unique shuffled letters, one per car, assigned in order
-  const letters=shuffle(LETTERS.slice(0,carsInPlay).split(''));
-  let li=0;
-  const cars=[];
-
-  // Consist cars on lead slots 1..consistSize (loco occupies slot 0)
-  for(let s=0;s<consistSize;s++)
-    cars.push({id:cars.length, letter:letters[li++], seg:'lead', slot:s+1});
-
-  // Spur — always fully occupied
-  for(let s=0;s<spurSpots;s++)
-    cars.push({id:cars.length, letter:letters[li++], seg:'spur', slot:s});
-
-  // Main — exactly mainCount cars
-  for(let s=0;s<mainCount;s++)
-    cars.push({id:cars.length, letter:letters[li++], seg:'main', slot:s});
-
-  // Consist ids ordered loco-adjacent first (ascending slot on lead)
-  const consistIds=cars
-    .filter(c=>c.seg==='lead')
-    .sort((a,b)=>a.slot-b.slot)
-    .map(c=>c.id);
-
-  // Generate goal: a random permutation of any spurSpots cars from the full pool,
-  // guaranteed different from the starting spur arrangement.
-  const goal = puzzleOn() ? generateGoal(cars, spurSpots) : null;
-
-  S={ leadSpots, mainSpots, spurSpots,
-      switchPos:'main',
-      locoSeg:'lead', locoSlot:0,
-      consist:consistIds,
-      cars,
-      goal };
-
-  document.getElementById('bSw').textContent='Turnout: MAIN';
-  hideWin();
-  renderGoal();
-  log('Ready. Consist: '+consistDesc());
-  render();
-}
-
-function generateGoal(cars, spurSpots){
-  const allLetters=cars.map(c=>c.letter);
-  const startSpurLetters=cars.filter(c=>c.seg==='spur')
-    .sort((a,b)=>a.slot-b.slot).map(c=>c.letter);
-
-  // Try up to 20 times to get a goal different from start spur state
-  for(let attempt=0;attempt<20;attempt++){
-    const pool=shuffle([...allLetters]);
-    const goalLetters=pool.slice(0,spurSpots);
-    // Check differs from start in at least one slot
-    const differs=goalLetters.some((l,i)=>l!==startSpurLetters[i]);
-    if(differs) return goalLetters.map((letter,slot)=>({letter,slot}));
-  }
-  // Fallback: reverse start spur
-  return [...startSpurLetters].reverse().map((letter,slot)=>({letter,slot}));
-}
-
-// ── Lookups ───────────────────────────────────────────────────────────────────
 function carById(id){ return S.cars.find(c=>c.id===id); }
 function carAt(seg,slot){ return S.cars.find(c=>c.seg===seg&&c.slot===slot)??null; }
 function inConsist(id){ return S.consist.includes(id); }
-function segCap(seg){ return seg==='lead'?S.leadSpots:seg==='main'?S.mainSpots:S.spurSpots; }
-function log(msg){ document.getElementById('log').textContent=msg; }
+
+function segCap(seg){
+  if(LAYOUT==='st'){
+    return seg==='lead'?S.leadSpots:seg==='main'?S.mainSpots:S.spurSpots;
+  } else {
+    if(seg==='lead') return S.leadSpots;  // 3 (loco slot + 2 empty)
+    if(seg==='main') return 3;
+    return 2; // spurA, spurB
+  }
+}
 
 function tailPos(){
-  if(!S.consist.length) return {seg:S.locoSeg, slot:S.locoSlot};
+  if(!S.consist.length) return {seg:S.locoSeg,slot:S.locoSlot};
   const c=carById(S.consist[S.consist.length-1]);
-  return {seg:c.seg, slot:c.slot};
+  return {seg:c.seg,slot:c.slot};
 }
 
 function consistDesc(){
@@ -261,49 +250,113 @@ function consistDesc(){
   return 'L→'+S.consist.map(id=>carById(id).letter).join('→');
 }
 
-// ── Win detection ─────────────────────────────────────────────────────────────
-function checkWin(){
-  if(!S.goal||!puzzleOn()) return;
-  const solved=S.goal.every(g=>{
-    const c=carAt('spur',g.slot);
-    return c && c.letter===g.letter;
-  });
-  if(solved) showWin();
+// ═══════════════════════════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════════════════════════
+function initState(){
+  if(LAYOUT==='st') initST(); else initIng();
+  updateSwitchButtons();
+  hideWin();
+  renderGoal();
+  log('Ready. '+consistDesc());
+  render();
 }
 
-function showWin(){
-  document.getElementById('winBanner').classList.add('visible');
-}
-function hideWin(){
-  document.getElementById('winBanner').classList.remove('visible');
-}
+// ── Single-turnout init ───────────────────────────────────────────────────────
+function initST(){
+  clampConsistSpinner();
+  const leadSpots=cfgVal('sLead'),mainSpots=cfgVal('sMain'),spurSpots=cfgVal('sSpur');
+  const totalSlots=leadSpots+mainSpots+spurSpots;
+  const carsInPlay=Math.min(cfgVal('sCars'),totalSlots);
+  const consistSize=Math.min(cfgVal('sConsist'),leadSpots,Math.max(0,carsInPlay-spurSpots));
+  const mainCount=carsInPlay-spurSpots-consistSize;
 
-// ── Goal display ──────────────────────────────────────────────────────────────
-function renderGoal(){
-  const wrap=document.getElementById('goalWrap');
-  const container=document.getElementById('goalCars');
-  container.innerHTML='';
-  if(!S.goal||!puzzleOn()){ wrap.classList.remove('visible'); return; }
-  wrap.classList.add('visible');
+  const letters=shuffle(LETTERS.slice(0,carsInPlay).split(''));
+  let li=0; const cars=[];
 
-  S.goal.forEach((g,i)=>{
-    if(i>0){
-      const arr=document.createElement('span');
-      arr.className='goal-arrow'; arr.textContent='→';
-      container.appendChild(arr);
-    }
-    // Find the car with this letter to get its color
-    const car=S.cars.find(c=>c.letter===g.letter);
-    const col=car?CAR_COLS[car.id%CAR_COLS.length]:'#888780';
-    const item=document.createElement('div');
-    item.className='goal-item';
-    item.innerHTML=`<div class="goal-car" style="background:${col}">${g.letter}</div><div class="goal-slot">slot ${g.slot}</div>`;
-    container.appendChild(item);
-  });
+  for(let s=0;s<consistSize;s++)
+    cars.push({id:cars.length,letter:letters[li++],seg:'lead',slot:s+1});
+  for(let s=0;s<spurSpots;s++)
+    cars.push({id:cars.length,letter:letters[li++],seg:'spur',slot:s});
+  for(let s=0;s<mainCount;s++)
+    cars.push({id:cars.length,letter:letters[li++],seg:'main',slot:s});
+
+  const consistIds=cars.filter(c=>c.seg==='lead').sort((a,b)=>a.slot-b.slot).map(c=>c.id);
+  const goal=puzzleOn()?generateGoalST(cars,spurSpots):null;
+
+  S={leadSpots,mainSpots,spurSpots,switchPos:'main',
+     locoSeg:'lead',locoSlot:0,consist:consistIds,cars,goal};
 }
 
-// ── Graph traversal ───────────────────────────────────────────────────────────
+function generateGoalST(cars,spurSpots){
+  const allLetters=cars.map(c=>c.letter);
+  const startSpurLetters=cars.filter(c=>c.seg==='spur').sort((a,b)=>a.slot-b.slot).map(c=>c.letter);
+  for(let attempt=0;attempt<20;attempt++){
+    const pool=shuffle([...allLetters]);
+    const goalLetters=pool.slice(0,spurSpots);
+    if(goalLetters.some((l,i)=>l!==startSpurLetters[i]))
+      return goalLetters.map((letter,slot)=>({letter,slot}));
+  }
+  return [...startSpurLetters].reverse().map((letter,slot)=>({letter,slot}));
+}
+
+// ── Inglenook init ────────────────────────────────────────────────────────────
+// Fixed topology: lead=3slots (loco@0 + 2 empty), main=3, spurA=2, spurB=2
+// 5 cars total, 7 slots, 2 empty at start.
+// Cars distributed randomly across main(3)+spurA(2)+spurB(2)=7 spots, 2 left empty.
+function initIng(){
+  const MAIN=3,SPUR=2,LEAD=3,TOTAL_CARS=5;
+  const letters=shuffle(LETTERS.slice(0,TOTAL_CARS).split(''));
+
+  // Build 7 slot positions, pick 5 randomly to fill
+  const allSlots=[
+    ...Array.from({length:MAIN},(_,i)=>({seg:'main',slot:i})),
+    ...Array.from({length:SPUR},(_,i)=>({seg:'spurA',slot:i})),
+    ...Array.from({length:SPUR},(_,i)=>({seg:'spurB',slot:i})),
+  ];
+  shuffle(allSlots);
+  const filled=allSlots.slice(0,TOTAL_CARS);
+
+  const cars=filled.map((pos,i)=>({id:i,letter:letters[i],seg:pos.seg,slot:pos.slot}));
+
+  const goal=puzzleOn()?generateGoalIng(cars):null;
+
+  S={leadSpots:LEAD,sw1:'main',sw2:'spurA',
+     locoSeg:'lead',locoSlot:0,consist:[],cars,goal};
+}
+
+function generateGoalIng(cars){
+  const allLetters=cars.map(c=>c.letter);
+  const startMain=cars.filter(c=>c.seg==='main').sort((a,b)=>a.slot-b.slot).map(c=>c.letter);
+  // pad startMain to length 3 with nulls (some slots may be empty)
+  const startArr=Array.from({length:3},(_,i)=>startMain[i]??null);
+
+  for(let attempt=0;attempt<30;attempt++){
+    const pool=shuffle([...allLetters]);
+    const goalLetters=pool.slice(0,3);
+    const differs=goalLetters.some((l,i)=>l!==startArr[i]);
+    if(differs) return goalLetters.map((letter,slot)=>({letter,slot}));
+  }
+  return [...allLetters.slice(0,3)].reverse().map((letter,slot)=>({letter,slot}));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Graph traversal
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// stepEast: given current position, return next position eastward or null (buffer)
 function stepEast(seg,slot){
+  if(LAYOUT==='st') return stepEastST(seg,slot);
+  return stepEastIng(seg,slot);
+}
+function stepWest(seg,slot){
+  if(LAYOUT==='st') return stepWestST(seg,slot);
+  return stepWestIng(seg,slot);
+}
+function stepDir(seg,slot,dir){ return dir>0?stepEast(seg,slot):stepWest(seg,slot); }
+
+// ── Single-turnout traversal ──────────────────────────────────────────────────
+function stepEastST(seg,slot){
   if(seg==='lead'){
     if(slot<S.leadSpots-1) return {seg:'lead',slot:slot+1};
     return {seg:S.switchPos,slot:0};
@@ -311,7 +364,7 @@ function stepEast(seg,slot){
   if(slot<segCap(seg)-1) return {seg,slot:slot+1};
   return null;
 }
-function stepWest(seg,slot){
+function stepWestST(seg,slot){
   if(seg==='lead'){
     if(slot>0) return {seg:'lead',slot:slot-1};
     return null;
@@ -319,10 +372,67 @@ function stepWest(seg,slot){
   if(slot>0) return {seg,slot:slot-1};
   return {seg:'lead',slot:S.leadSpots-1};
 }
-function stepDir(seg,slot,dir){ return dir>0?stepEast(seg,slot):stepWest(seg,slot); }
-function canEnter(seg){ return seg==='lead'||seg===S.switchPos; }
 
-// ── Push chain ────────────────────────────────────────────────────────────────
+// canEnter for single-turnout
+function canEnterST(seg){
+  return seg==='lead'||seg===S.switchPos;
+}
+
+// ── Inglenook traversal ───────────────────────────────────────────────────────
+// Lead: slots 0,1,2 → T1 at east end of lead
+// T1 (sw1): 'main' → main slot 0 | 'branch' → T2 (adjacent, no slot)
+// T2 (sw2): 'spurA' → spurA slot 0 | 'spurB' → spurB slot 0
+// Westward: main/spurA/spurB slot 0 → lead slot 2 (through T1/T2)
+
+function stepEastIng(seg,slot){
+  if(seg==='lead'){
+    if(slot<S.leadSpots-1) return {seg:'lead',slot:slot+1};
+    // At T1
+    if(S.sw1==='main') return {seg:'main',slot:0};
+    // T1 → T2 → active spur (T2 is adjacent, no intermediate slot)
+    return {seg:S.sw2,slot:0};
+  }
+  if(slot<segCap(seg)-1) return {seg,slot:slot+1};
+  return null; // east buffer
+}
+
+function stepWestIng(seg,slot){
+  if(seg==='lead'){
+    if(slot>0) return {seg:'lead',slot:slot-1};
+    return null; // west buffer
+  }
+  // Any branch slot > 0 → step back within branch
+  if(slot>0) return {seg,slot:slot-1};
+  // Branch slot 0 → back through T1/T2 onto lead slot (leadSpots-1)
+  return {seg:'lead',slot:S.leadSpots-1};
+}
+
+// canEnter for inglenook
+function canEnterIng(seg){
+  if(seg==='lead') return true;
+  if(seg==='main') return S.sw1==='main';
+  // spurA or spurB: T1 must be 'branch', T2 must match seg
+  return S.sw1==='branch' && S.sw2===seg;
+}
+
+function canEnter(seg){
+  return LAYOUT==='st'?canEnterST(seg):canEnterIng(seg);
+}
+
+// ── Blocked message ───────────────────────────────────────────────────────────
+function blockedMsg(seg){
+  if(LAYOUT==='st') return 'Turnout set to '+S.switchPos+' — cannot enter '+seg+'.';
+  if(seg==='main') return 'T1 must be set to Main to enter main spur.';
+  if(seg==='spurA'||seg==='spurB'){
+    if(S.sw1!=='branch') return 'T1 must be set to Branch to reach spurs.';
+    return 'T2 must be set to '+(seg==='spurA'?'Spur A':'Spur B')+'.';
+  }
+  return 'Cannot enter '+seg+'.';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Push chain
+// ═══════════════════════════════════════════════════════════════════════════════
 function pushLoose(seg,slot,dir){
   const chain=[];
   let s=seg,sl=slot;
@@ -341,8 +451,15 @@ function pushLoose(seg,slot,dir){
   return true;
 }
 
-// ── Move ──────────────────────────────────────────────────────────────────────
-function posScore(seg,slot){ return seg==='lead'?slot:S.leadSpots+slot; }
+// ═══════════════════════════════════════════════════════════════════════════════
+// Move
+// ═══════════════════════════════════════════════════════════════════════════════
+// posScore: linearise position for finding leading edge of train.
+// Lead slots score lowest; branch slots score higher.
+function posScore(seg,slot){
+  if(seg==='lead') return slot;
+  return S.leadSpots+slot; // all branches share the same base; only one is active at a time
+}
 
 function move(dir){
   const trainPositions=[
@@ -350,13 +467,13 @@ function move(dir){
     ...S.consist.map(id=>{ const c=carById(id); return {seg:c.seg,slot:c.slot}; })
   ];
   const leadPos=trainPositions.reduce((best,p)=>{
-    const bs=posScore(best.seg,best.slot), ps=posScore(p.seg,p.slot);
+    const bs=posScore(best.seg,best.slot),ps=posScore(p.seg,p.slot);
     return dir>0?(ps>bs?p:best):(ps<bs?p:best);
   });
 
   const target=stepDir(leadPos.seg,leadPos.slot,dir);
   if(!target){ log('Buffer stop.'); return; }
-  if(!canEnter(target.seg)){ log('Turnout set to '+S.switchPos+' — cannot enter '+target.seg+'.'); return; }
+  if(!canEnter(target.seg)){ log(blockedMsg(target.seg)); return; }
 
   const blocker=carAt(target.seg,target.slot);
   if(blocker&&!inConsist(blocker.id)){
@@ -375,16 +492,17 @@ function move(dir){
   S.locoSeg=locoNxt.seg; S.locoSlot=locoNxt.slot;
 
   log('Loco → '+S.locoSeg+'['+S.locoSlot+'] | '+consistDesc());
-  checkWin();
-  render();
+  checkWin(); render();
 }
 
-// ── Couple / Drop / Uncouple ──────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Couple / Drop / Uncouple
+// ═══════════════════════════════════════════════════════════════════════════════
 function couple(){
   const tail=tailPos();
   const nxt=stepEast(tail.seg,tail.slot);
   if(!nxt){ log('Nothing to couple — at east buffer.'); return; }
-  if(!canEnter(nxt.seg)){ log('Turnout set to '+S.switchPos+' — cannot reach '+nxt.seg+'.'); return; }
+  if(!canEnter(nxt.seg)){ log(blockedMsg(nxt.seg)); return; }
   const c=carAt(nxt.seg,nxt.slot);
   if(!c){ log('No car at '+nxt.seg+'['+nxt.slot+'].'); return; }
   if(inConsist(c.id)){ log('Car '+c.letter+' already in consist.'); return; }
@@ -398,8 +516,7 @@ function drop(){
   const id=S.consist.pop();
   const c=carById(id);
   log('Dropped '+c.letter+' at '+c.seg+'['+c.slot+']. '+consistDesc());
-  checkWin();
-  render();
+  checkWin(); render();
 }
 
 function uncoupleAt(carId){
@@ -407,199 +524,384 @@ function uncoupleAt(carId){
   if(pos<0){ log('Car '+carById(carId).letter+' is not in consist.'); return; }
   const dropped=S.consist.splice(pos);
   log('Uncoupled '+carById(carId).letter+
-      (dropped.length>1?' and '+(dropped.length-1)+' behind it.':'.')+
-      ' '+consistDesc());
-  checkWin();
-  render();
+      (dropped.length>1?' and '+(dropped.length-1)+' behind it.':'.')+' '+consistDesc());
+  checkWin(); render();
 }
 
-// ── Switch ────────────────────────────────────────────────────────────────────
-function toggleSwitch(){
-  if(S.locoSeg==='main'||S.locoSeg==='spur'){ log('Move loco to lead before throwing switch.'); return; }
-  if(S.consist.some(id=>{ const c=carById(id); return c.seg==='main'||c.seg==='spur'; })){
-    log('A consist car is on a branch — drop it first.'); return;
-  }
+// ═══════════════════════════════════════════════════════════════════════════════
+// Switch controls
+// ═══════════════════════════════════════════════════════════════════════════════
+function onBranchSeg(seg){ return seg!=='lead'; }
+
+function locoOrConsistOnBranch(){
+  if(onBranchSeg(S.locoSeg)) return true;
+  return S.consist.some(id=>onBranchSeg(carById(id).seg));
+}
+
+// Single-turnout: one switch
+function toggleSwitchST(){
+  if(locoOrConsistOnBranch()){ log('Move loco/consist to lead before throwing switch.'); return; }
   S.switchPos=S.switchPos==='main'?'spur':'main';
-  document.getElementById('bSw').textContent='Turnout: '+S.switchPos.toUpperCase();
-  log('Turnout → '+S.switchPos+'.');
-  render();
+  updateSwitchButtons();
+  log('Turnout → '+S.switchPos+'.'); render();
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
-function slotX(seg,slot){
-  const frogX=MARGIN+S.leadSpots*SLOT_W;
-  return seg==='lead'?MARGIN+slot*SLOT_W+4:frogX+FROG_GAP+slot*SLOT_W+4;
+// Inglenook: T1 and T2
+function toggleSW1(){
+  if(locoOrConsistOnBranch()){ log('Move loco/consist to lead before throwing T1.'); return; }
+  S.sw1=S.sw1==='main'?'branch':'main';
+  updateSwitchButtons();
+  log('T1 → '+(S.sw1==='main'?'Main spur':'Branch/T2')+'.'); render();
 }
-function slotY(seg){ return seg==='spur'?LEAD_Y+BRANCH_DROP:LEAD_Y; }
 
+function toggleSW2(){
+  // Can only throw T2 if nothing is on spurA or spurB
+  const onSpurs=S.cars.some(c=>(c.seg==='spurA'||c.seg==='spurB')&&inConsist(c.id));
+  if(S.locoSeg==='spurA'||S.locoSeg==='spurB'){ log('Move loco off spur before throwing T2.'); return; }
+  if(onSpurs){ log('Consist car is on a spur — drop it first.'); return; }
+  S.sw2=S.sw2==='spurA'?'spurB':'spurA';
+  updateSwitchButtons();
+  log('T2 → '+(S.sw2==='spurA'?'Spur A':'Spur B')+'.'); render();
+}
+
+function updateSwitchButtons(){
+  const container=document.getElementById('swButtons');
+  container.innerHTML='';
+  if(LAYOUT==='st'){
+    const b=document.createElement('button');
+    b.id='bSw'; b.textContent='Turnout: '+(S.switchPos||'MAIN').toUpperCase();
+    b.onclick=toggleSwitchST; container.appendChild(b);
+    document.getElementById('keySwDesc').innerHTML='<kbd>S</kbd> switch';
+  } else {
+    const b1=document.createElement('button');
+    b1.id='bSw1'; b1.textContent='T1: '+(S.sw1==='main'?'Main':'Branch');
+    b1.onclick=toggleSW1; container.appendChild(b1);
+    const sp=document.createElement('span'); sp.style.marginLeft='8px'; container.appendChild(sp);
+    const b2=document.createElement('button');
+    b2.id='bSw2'; b2.textContent='T2: '+(S.sw2==='spurA'?'Spur A':'Spur B');
+    b2.onclick=toggleSW2; container.appendChild(b2);
+    document.getElementById('keySwDesc').innerHTML='<kbd>S</kbd> T1 &nbsp;<kbd>X</kbd> T2';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Win detection
+// ═══════════════════════════════════════════════════════════════════════════════
+function goalSeg(){ return LAYOUT==='st'?'spur':'main'; }
+
+function checkWin(){
+  if(!S.goal||!puzzleOn()) return;
+  const seg=goalSeg();
+  const solved=S.goal.every(g=>{ const c=carAt(seg,g.slot); return c&&c.letter===g.letter; });
+  if(solved) showWin();
+}
+function showWin(){ document.getElementById('winBanner').classList.add('visible'); }
+function hideWin(){ document.getElementById('winBanner').classList.remove('visible'); }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Goal display
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderGoal(){
+  const wrap=document.getElementById('goalWrap');
+  const container=document.getElementById('goalCars');
+  container.innerHTML='';
+  if(!S.goal||!puzzleOn()){ wrap.classList.remove('visible'); return; }
+  wrap.classList.add('visible');
+  document.getElementById('goalLabel').textContent=
+    LAYOUT==='st'
+      ? 'Goal — spot these cars on the spur (slot 0 = frog end):'
+      : 'Goal — spot these cars on the main spur (slot 0 = T1 end):';
+
+  S.goal.forEach((g,i)=>{
+    if(i>0){ const a=document.createElement('span'); a.className='goal-arrow'; a.textContent='→'; container.appendChild(a); }
+    const car=S.cars.find(c=>c.letter===g.letter);
+    const col=car?CAR_COLS[car.id%CAR_COLS.length]:'#888780';
+    const item=document.createElement('div'); item.className='goal-item';
+    item.innerHTML='<div class="goal-car" style="background:'+col+'">'+g.letter+'</div><div class="goal-slot">slot '+g.slot+'</div>';
+    container.appendChild(item);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Render
+// ═══════════════════════════════════════════════════════════════════════════════
 function render(){
+  if(LAYOUT==='st') renderST(); else renderIng();
+}
+
+// ── Shared drawing helpers ────────────────────────────────────────────────────
+function setupCanvas(ch){
   const canvas=document.getElementById('c');
   const dpr=window.devicePixelRatio||1;
-  const CW=canvas.parentElement.clientWidth, CH=170;
-  canvas.width=CW*dpr; canvas.height=CH*dpr;
-  canvas.style.width=CW+'px'; canvas.style.height=CH+'px';
+  const CW=canvas.parentElement.clientWidth;
+  canvas.width=CW*dpr; canvas.height=ch*dpr;
+  canvas.style.width=CW+'px'; canvas.style.height=ch+'px';
   const ctx=canvas.getContext('2d');
   ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,CW,CH:ch,dpr};
+}
 
+function themeColors(){
   const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;
-  const trackFill=dark?'#3a3a38':'#d3d1c7';
-  const railCol  =dark?'#888780':'#5f5e5a';
-  const bufCol   =dark?'#5f5e5a':'#999896';
-  const numCol   =dark?'#555450':'#c4c2b9';
-  const lblCol   ='#888780';
+  return {
+    trackFill:dark?'#3a3a38':'#d3d1c7',
+    railCol:  dark?'#888780':'#5f5e5a',
+    bufCol:   dark?'#5f5e5a':'#999896',
+    numCol:   dark?'#555450':'#c4c2b9',
+    lblCol:   '#888780',
+    frogActive:'#EF9F27',
+  };
+}
 
-  ctx.clearRect(0,0,CW,CH);
-  const frogX=MARGIN+S.leadSpots*SLOT_W;
-  const MAIN_Y=LEAD_Y, SPUR_Y=LEAD_Y+BRANCH_DROP;
-
-  function drawTrack(x,y,slots){
-    const len=slots*SLOT_W;
-    ctx.fillStyle=trackFill; ctx.fillRect(x,y-5,len,10);
-    ctx.fillStyle=railCol; ctx.fillRect(x,y-5,len,2); ctx.fillRect(x,y+3,len,2);
-  }
-  function bufStop(x,y){
-    ctx.fillStyle=bufCol;
-    ctx.fillRect(x-3,y-16,5,32); ctx.fillRect(x-8,y-16,14,5); ctx.fillRect(x-8,y+11,14,5);
-  }
-
-  drawTrack(MARGIN,MAIN_Y,S.leadSpots); bufStop(MARGIN,MAIN_Y);
-  drawTrack(frogX+FROG_GAP,MAIN_Y,S.mainSpots); bufStop(frogX+FROG_GAP+S.mainSpots*SLOT_W,MAIN_Y);
-  drawTrack(frogX+FROG_GAP,SPUR_Y,S.spurSpots); bufStop(frogX+FROG_GAP+S.spurSpots*SLOT_W,SPUR_Y);
-
-  // Frog
-  ctx.lineWidth=3; ctx.strokeStyle='#EF9F27';
-  ctx.beginPath(); ctx.moveTo(frogX,MAIN_Y);
-  ctx.lineTo(frogX+FROG_GAP,S.switchPos==='main'?MAIN_Y:SPUR_Y); ctx.stroke();
-  ctx.lineWidth=2; ctx.strokeStyle=trackFill; ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(frogX,MAIN_Y);
-  ctx.lineTo(frogX+FROG_GAP,S.switchPos==='main'?SPUR_Y:MAIN_Y); ctx.stroke();
+function drawTrack(ctx,t,x,y,slots){
+  const len=slots*SLOT_W;
+  ctx.fillStyle=t.trackFill; ctx.fillRect(x,y-5,len,10);
+  ctx.fillStyle=t.railCol; ctx.fillRect(x,y-5,len,2); ctx.fillRect(x,y+3,len,2);
+}
+function drawBufStop(ctx,t,x,y){
+  ctx.fillStyle=t.bufCol;
+  ctx.fillRect(x-3,y-16,5,32); ctx.fillRect(x-8,y-16,14,5); ctx.fillRect(x-8,y+11,14,5);
+}
+function drawFrog(ctx,t,x1,y1,x2,y2,x2i,y2i){
+  ctx.lineWidth=3; ctx.strokeStyle=t.frogActive;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.lineWidth=2; ctx.strokeStyle=t.trackFill; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2i,y2i); ctx.stroke();
   ctx.setLineDash([]);
+}
+function drawNums(ctx,t,x0,y,count){
+  for(let i=0;i<count;i++){
+    ctx.fillStyle=t.numCol; ctx.font='9px monospace'; ctx.textAlign='center';
+    ctx.fillText(i,x0+i*SLOT_W+SLOT_W/2,y+18);
+  }
+}
+function drawCar(ctx,car,x,y,inC){
+  const w=SLOT_W-8;
+  ctx.fillStyle=CAR_COLS[car.id%CAR_COLS.length];
+  ctx.globalAlpha=inC?1:0.82;
+  ctx.beginPath(); ctx.roundRect(x,y-SLOT_H/2,w,SLOT_H,4); ctx.fill();
+  if(inC){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(x,y-SLOT_H/2,w,SLOT_H,4); ctx.stroke(); }
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#fff'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(car.letter,x+w/2,y+5);
+}
+function drawLoco(ctx,x,y){
+  const w=SLOT_W-8;
+  ctx.fillStyle=LOCO_COL;
+  ctx.beginPath(); ctx.roundRect(x,y-SLOT_H/2-2,w,SLOT_H+4,5); ctx.fill();
+  ctx.fillStyle='#fff'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('L',x+w/2,y+5);
+}
 
-  // Segment labels
-  ctx.fillStyle=lblCol; ctx.font='11px sans-serif';
-  ctx.textAlign='right'; ctx.fillText('Lead',MARGIN-4,MAIN_Y+4);
+// ── Single-turnout render ─────────────────────────────────────────────────────
+function renderST(){
+  const {ctx,CW}=setupCanvas(170);
+  const t=themeColors();
+  const LEAD_Y=90, SPUR_Y=90+46;
+  ctx.clearRect(0,0,CW,170);
+
+  const frogX=MARGIN+S.leadSpots*SLOT_W;
+
+  drawTrack(ctx,t,MARGIN,LEAD_Y,S.leadSpots); drawBufStop(ctx,t,MARGIN,LEAD_Y);
+  drawTrack(ctx,t,frogX+FROG_GAP,LEAD_Y,S.mainSpots); drawBufStop(ctx,t,frogX+FROG_GAP+S.mainSpots*SLOT_W,LEAD_Y);
+  drawTrack(ctx,t,frogX+FROG_GAP,SPUR_Y,S.spurSpots); drawBufStop(ctx,t,frogX+FROG_GAP+S.spurSpots*SLOT_W,SPUR_Y);
+
+  const toMain=S.switchPos==='main';
+  drawFrog(ctx,t,frogX,LEAD_Y,frogX+FROG_GAP,toMain?LEAD_Y:SPUR_Y,frogX+FROG_GAP,toMain?SPUR_Y:LEAD_Y);
+
+  ctx.fillStyle=t.lblCol; ctx.font='11px sans-serif';
+  ctx.textAlign='right'; ctx.fillText('Lead',MARGIN-4,LEAD_Y+4);
   ctx.textAlign='left';
-  ctx.fillText('Main',frogX+FROG_GAP+S.mainSpots*SLOT_W+8,MAIN_Y+4);
+  ctx.fillText('Main',frogX+FROG_GAP+S.mainSpots*SLOT_W+8,LEAD_Y+4);
   ctx.fillText('Spur',frogX+FROG_GAP+S.spurSpots*SLOT_W+8,SPUR_Y+4);
 
-  // Slot numbers
-  function drawNums(seg,x0,y){
-    for(let i=0;i<segCap(seg);i++){
-      ctx.fillStyle=numCol; ctx.font='9px monospace'; ctx.textAlign='center';
-      ctx.fillText(i,x0+i*SLOT_W+SLOT_W/2,y+18);
-    }
-  }
-  drawNums('lead',MARGIN,MAIN_Y);
-  drawNums('main',frogX+FROG_GAP,MAIN_Y);
-  drawNums('spur',frogX+FROG_GAP,SPUR_Y);
+  drawNums(ctx,t,MARGIN,LEAD_Y,S.leadSpots);
+  drawNums(ctx,t,frogX+FROG_GAP,LEAD_Y,S.mainSpots);
+  drawNums(ctx,t,frogX+FROG_GAP,SPUR_Y,S.spurSpots);
 
-  // Goal highlight: tinted slot backgrounds on spur when puzzle mode on
+  // Goal highlights on spur
   if(S.goal&&puzzleOn()){
     S.goal.forEach(g=>{
-      const x=slotX('spur',g.slot)-4, y=slotY('spur');
-      const current=carAt('spur',g.slot);
-      const correct=current&&current.letter===g.letter;
+      const x=stSlotX('spur',g.slot)-4,y=SPUR_Y;
+      const correct=carAt('spur',g.slot)?.letter===g.letter;
       ctx.fillStyle=correct?'rgba(29,158,117,0.18)':'rgba(239,159,39,0.13)';
       ctx.beginPath(); ctx.roundRect(x,y-SLOT_H/2-4,SLOT_W,SLOT_H+8,4); ctx.fill();
     });
   }
 
-  // Cars
   const consistSet=new Set(S.consist);
   S.cars.forEach(car=>{
-    const x=slotX(car.seg,car.slot), y=slotY(car.seg), w=SLOT_W-8;
-    const inC=consistSet.has(car.id);
-    ctx.fillStyle=CAR_COLS[car.id%CAR_COLS.length];
-    ctx.globalAlpha=inC?1:0.82;
-    ctx.beginPath(); ctx.roundRect(x,y-SLOT_H/2,w,SLOT_H,4); ctx.fill();
-    if(inC){ ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(x,y-SLOT_H/2,w,SLOT_H,4); ctx.stroke(); }
-    ctx.globalAlpha=1;
-    ctx.fillStyle='#fff'; ctx.font='bold 13px sans-serif'; ctx.textAlign='center';
-    ctx.fillText(car.letter,x+w/2,y+5);
+    const x=stSlotX(car.seg,car.slot),y=car.seg==='spur'?SPUR_Y:LEAD_Y;
+    drawCar(ctx,car,x,y,consistSet.has(car.id));
   });
+  drawLoco(ctx,stSlotX(S.locoSeg,S.locoSlot),S.locoSeg==='spur'?SPUR_Y:LEAD_Y);
 
-  // Loco
-  const lx=slotX(S.locoSeg,S.locoSlot), ly=slotY(S.locoSeg), lw=SLOT_W-8;
-  ctx.fillStyle=LOCO_COL;
-  ctx.beginPath(); ctx.roundRect(lx,ly-SLOT_H/2-2,lw,SLOT_H+4,5); ctx.fill();
-  ctx.fillStyle='#fff'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
-  ctx.fillText('L',lx+lw/2,ly+5);
+  wireCanvasClick(CW,170,(car)=>uncoupleAt(car.id),(car)=>{
+    const x=stSlotX(car.seg,car.slot),y=car.seg==='spur'?90+46:90; return {x,y};
+  });
+}
 
-  // Click to uncouple
+function stSlotX(seg,slot){
+  const frogX=MARGIN+S.leadSpots*SLOT_W;
+  return seg==='lead'?MARGIN+slot*SLOT_W+4:frogX+FROG_GAP+slot*SLOT_W+4;
+}
+
+// ── Inglenook render ──────────────────────────────────────────────────────────
+// Layout (left→right):
+//   Lead (3 slots) → T1 → Main spur (3 slots, straight)
+//                       ↘ T2 → Spur A (2 slots, angled slightly down)
+//                            ↘ Spur B (2 slots, angled further down)
+function renderIng(){
+  const CH=220;
+  const {ctx,CW}=setupCanvas(CH);
+  const t=themeColors();
+  ctx.clearRect(0,0,CW,CH);
+
+  const LEAD_Y=80;
+  const MAIN_Y=80;
+  const SPUR_A_Y=130;
+  const SPUR_B_Y=180;
+
+  // T1 frog x (end of lead)
+  const t1X=MARGIN+S.leadSpots*SLOT_W;
+  // T2 is adjacent to T1 — same x position on the branch leg
+  const t2X=t1X+FROG_GAP;
+  const branchX=t2X+FROG_GAP; // where spurA and spurB tracks start
+
+  // Draw lead
+  drawTrack(ctx,t,MARGIN,LEAD_Y,S.leadSpots); drawBufStop(ctx,t,MARGIN,LEAD_Y);
+  // Draw main spur
+  drawTrack(ctx,t,t1X+FROG_GAP,MAIN_Y,3); drawBufStop(ctx,t,t1X+FROG_GAP+3*SLOT_W,MAIN_Y);
+  // Draw spur A
+  drawTrack(ctx,t,branchX,SPUR_A_Y,2); drawBufStop(ctx,t,branchX+2*SLOT_W,SPUR_A_Y);
+  // Draw spur B
+  drawTrack(ctx,t,branchX,SPUR_B_Y,2); drawBufStop(ctx,t,branchX+2*SLOT_W,SPUR_B_Y);
+
+  // T1: lead→main(active) or lead→branch(inactive dashed)
+  {
+    const toMain=S.sw1==='main';
+    drawFrog(ctx,t,t1X,LEAD_Y,t1X+FROG_GAP,toMain?MAIN_Y:SPUR_A_Y,t1X+FROG_GAP,toMain?SPUR_A_Y:MAIN_Y);
+  }
+  // T2: branch→spurA(active) or branch→spurB
+  {
+    const toA=S.sw2==='spurA';
+    drawFrog(ctx,t,t2X,SPUR_A_Y,branchX,toA?SPUR_A_Y:SPUR_B_Y,branchX,toA?SPUR_B_Y:SPUR_A_Y);
+  }
+
+  // Labels
+  ctx.fillStyle=t.lblCol; ctx.font='11px sans-serif';
+  ctx.textAlign='right'; ctx.fillText('Lead',MARGIN-4,LEAD_Y+4);
+  ctx.textAlign='left';
+  ctx.fillText('Main',t1X+FROG_GAP+3*SLOT_W+8,MAIN_Y+4);
+  ctx.fillText('Spur A',branchX+2*SLOT_W+8,SPUR_A_Y+4);
+  ctx.fillText('Spur B',branchX+2*SLOT_W+8,SPUR_B_Y+4);
+
+  // Slot numbers
+  drawNums(ctx,t,MARGIN,LEAD_Y,S.leadSpots);
+  drawNums(ctx,t,t1X+FROG_GAP,MAIN_Y,3);
+  drawNums(ctx,t,branchX,SPUR_A_Y,2);
+  drawNums(ctx,t,branchX,SPUR_B_Y,2);
+
+  // Goal highlights on main spur
+  if(S.goal&&puzzleOn()){
+    S.goal.forEach(g=>{
+      const x=ingSlotX('main',g.slot,t1X,branchX)-4;
+      const correct=carAt('main',g.slot)?.letter===g.letter;
+      ctx.fillStyle=correct?'rgba(29,158,117,0.18)':'rgba(239,159,39,0.13)';
+      ctx.beginPath(); ctx.roundRect(x,MAIN_Y-SLOT_H/2-4,SLOT_W,SLOT_H+8,4); ctx.fill();
+    });
+  }
+
+  const consistSet=new Set(S.consist);
+  S.cars.forEach(car=>{
+    const x=ingSlotX(car.seg,car.slot,t1X,branchX);
+    const y=ingSlotY(car.seg,LEAD_Y,MAIN_Y,SPUR_A_Y,SPUR_B_Y);
+    drawCar(ctx,car,x,y,consistSet.has(car.id));
+  });
+  const lx=ingSlotX(S.locoSeg,S.locoSlot,t1X,branchX);
+  const ly=ingSlotY(S.locoSeg,LEAD_Y,MAIN_Y,SPUR_A_Y,SPUR_B_Y);
+  drawLoco(ctx,lx,ly);
+
+  wireCanvasClick(CW,CH,(car)=>uncoupleAt(car.id),(car)=>{
+    return {x:ingSlotX(car.seg,car.slot,t1X,branchX),y:ingSlotY(car.seg,LEAD_Y,MAIN_Y,SPUR_A_Y,SPUR_B_Y)};
+  });
+}
+
+function ingSlotX(seg,slot,t1X,branchX){
+  if(seg==='lead') return MARGIN+slot*SLOT_W+4;
+  if(seg==='main') return t1X+FROG_GAP+slot*SLOT_W+4;
+  return branchX+slot*SLOT_W+4; // spurA, spurB
+}
+function ingSlotY(seg,LEAD_Y,MAIN_Y,SPUR_A_Y,SPUR_B_Y){
+  if(seg==='lead') return LEAD_Y;
+  if(seg==='main') return MAIN_Y;
+  if(seg==='spurA') return SPUR_A_Y;
+  return SPUR_B_Y;
+}
+
+// ── Canvas click wiring ───────────────────────────────────────────────────────
+function wireCanvasClick(CW,CH,onCarClick,getCarXY){
+  const canvas=document.getElementById('c');
   canvas.onclick=(e)=>{
     const rect=canvas.getBoundingClientRect();
     const mx=(e.clientX-rect.left)*(CW/rect.width);
     const my=(e.clientY-rect.top)*(CH/rect.height);
     for(const car of S.cars){
-      const x=slotX(car.seg,car.slot), y=slotY(car.seg), w=SLOT_W-8;
-      if(mx>=x&&mx<=x+w&&Math.abs(my-y)<SLOT_H/2+2){ uncoupleAt(car.id); return; }
+      const {x,y}=getCarXY(car); const w=SLOT_W-8;
+      if(mx>=x&&mx<=x+w&&Math.abs(my-y)<SLOT_H/2+2){ onCarClick(car); return; }
     }
   };
 }
 
-// ── Wiring ────────────────────────────────────────────────────────────────────
-
-// When main or spur spot count changes, reset cars-in-play to (main+spur-1)
-// Spinner state: min/max for each control
-const SPIN={
-  sLead:   {min:1, max:8,  val:3},
-  sMain:   {min:1, max:8,  val:3},
-  sSpur:   {min:1, max:8,  val:3},
-  sCars:   {min:1, max:12, val:5},
-  sConsist:{min:0, max:8,  val:2},
-};
-
-function spinVal(id){ return SPIN[id].val; }
-
-// Override cfgVal to use SPIN state
-// (cfgVal above is redefined here to read SPIN)
-// We patch it directly:
-// cfgVal reads from span, which we keep in sync with SPIN[id].val
-
-function setSpinVal(id, v){
-  const s=SPIN[id];
-  s.val=Math.max(s.min, Math.min(s.max, v));
-  document.getElementById('v'+id.slice(1)).textContent=s.val;
-}
-
-function resetCarsDefault(){
-  setSpinVal('sCars', SPIN.sMain.val + SPIN.sSpur.val - 1);
-}
-
-function clampAndInit(){
-  clampConsistSlider();
+// ═══════════════════════════════════════════════════════════════════════════════
+// Layout switching
+// ═══════════════════════════════════════════════════════════════════════════════
+function switchLayout(type){
+  LAYOUT=type;
+  document.getElementById('stConfig').style.display=type==='st'?'':'none';
+  document.getElementById('igConfig').style.display=type==='ing'?'':'none';
+  document.getElementById('btnSingleTurnout').classList.toggle('active',type==='st');
+  document.getElementById('btnInglenook').classList.toggle('active',type==='ing');
   initState();
 }
 
-// Wire up all spinner +/- buttons
-Object.keys(SPIN).forEach(id=>{
-  // initialise display
-  document.getElementById('v'+id.slice(1)).textContent=SPIN[id].val;
-
-  document.getElementById(id+'_up').addEventListener('click',()=>{
-    setSpinVal(id, SPIN[id].val+1);
-    if(id==='sMain'||id==='sSpur') resetCarsDefault();
-    clampAndInit();
-  });
-  document.getElementById(id+'_dn').addEventListener('click',()=>{
-    setSpinVal(id, SPIN[id].val-1);
-    if(id==='sMain'||id==='sSpur') resetCarsDefault();
-    clampAndInit();
-  });
-});
+// ═══════════════════════════════════════════════════════════════════════════════
+// Wiring
+// ═══════════════════════════════════════════════════════════════════════════════
+document.getElementById('btnSingleTurnout').onclick=()=>switchLayout('st');
+document.getElementById('btnInglenook').onclick=()=>switchLayout('ing');
 
 document.getElementById('puzzleMode').addEventListener('change',()=>{
-  hideWin(); renderGoal(); render();
-  if(puzzleOn()&&!S.goal){ S.goal=generateGoal(S.cars,S.spurSpots); renderGoal(); }
+  hideWin();
+  if(puzzleOn()&&!S.goal){
+    S.goal=LAYOUT==='st'?generateGoalST(S.cars,S.spurSpots):generateGoalIng(S.cars);
+  }
+  renderGoal(); render();
 });
+
+// Single-turnout spinners
+Object.keys(SPIN).forEach(id=>{
+  document.getElementById('v'+id.slice(1)).textContent=SPIN[id].val;
+  document.getElementById(id+'_up').addEventListener('click',()=>{
+    setSpinVal(id,SPIN[id].val+1);
+    if(id==='sMain'||id==='sSpur') resetCarsDefault();
+    clampConsistSpinner(); initState();
+  });
+  document.getElementById(id+'_dn').addEventListener('click',()=>{
+    setSpinVal(id,SPIN[id].val-1);
+    if(id==='sMain'||id==='sSpur') resetCarsDefault();
+    clampConsistSpinner(); initState();
+  });
+});
+
+document.getElementById('bNewPuzzle').onclick=initState;
+document.getElementById('bNewPuzzleIG').onclick=initState;
 
 document.getElementById('bL').onclick=()=>move(-1);
 document.getElementById('bR').onclick=()=>move(1);
-document.getElementById('bSw').onclick=toggleSwitch;
 document.getElementById('bCouple').onclick=couple;
 document.getElementById('bDrop').onclick=drop;
 document.getElementById('bReset').onclick=initState;
-document.getElementById('bNewPuzzle').onclick=initState;
 window.addEventListener('resize',render);
 
 document.addEventListener('keydown',(e)=>{
@@ -607,11 +909,14 @@ document.addEventListener('keydown',(e)=>{
   switch(e.key){
     case 'ArrowLeft':  e.preventDefault(); move(-1); break;
     case 'ArrowRight': e.preventDefault(); move(1);  break;
-    case 's': case 'S': toggleSwitch(); break;
-    case 'c': case 'C': couple();       break;
-    case 'd': case 'D': drop();         break;
-    case 'r': case 'R': initState();    break;
-    case 'n': case 'N': initState();    break;
+    case 's': case 'S':
+      if(LAYOUT==='st') toggleSwitchST(); else toggleSW1(); break;
+    case 'x': case 'X':
+      if(LAYOUT==='ing') toggleSW2(); break;
+    case 'c': case 'C': couple();    break;
+    case 'd': case 'D': drop();      break;
+    case 'r': case 'R': initState(); break;
+    case 'n': case 'N': initState(); break;
   }
 });
 
